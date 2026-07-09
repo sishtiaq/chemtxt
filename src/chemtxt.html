@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>chemtxt — periodic transliteration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bench:      #171d1a;
+    --bench-2:    #1f2724;
+    --paper:      #f1ede1;
+    --paper-2:    #e8e2d1;
+    --ink:        #23261f;
+    --ink-soft:   #6b6a5e;
+    --rust:       #c1502e;
+    --rust-dim:   #8f3c23;
+    --hair:       rgba(35,38,31,0.14);
+    --hair-dark:  rgba(241,237,225,0.12);
+
+    --c-ak: #c1502e;  /* alkali */
+    --c-ae: #d9a441;  /* alkaline earth */
+    --c-tm: #5c7a99;  /* transition metal */
+    --c-pt: #7c9070;  /* post-transition metal */
+    --c-me: #9b7ea8;  /* metalloid */
+    --c-nm: #4a9b8e;  /* nonmetal */
+    --c-ha: #b5533c;  /* halogen */
+    --c-ng: #8b8b83;  /* noble gas */
+    --c-re: #a8875a;  /* rare earth */
+    --c-un: #6d6d66;  /* synthetic/unknown */
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bench);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(255,255,255,0.035), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(255,255,255,0.025), transparent 45%);
+    color:var(--paper);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+    padding:48px 24px 80px;
+  }
+
+  .wrap{max-width:1100px;margin:0 auto;}
+
+  /* ---------- header ---------- */
+  header{margin-bottom:40px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--rust);
+    font-weight:600;
+    margin:0 0 10px;
+  }
+  h1{
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:700;
+    font-size:clamp(2.4rem, 6vw, 3.6rem);
+    letter-spacing:-0.01em;
+    margin:0 0 12px;
+    color:var(--paper);
+  }
+  h1 .num{
+    font-size:0.32em;
+    vertical-align:super;
+    color:var(--rust);
+    font-weight:600;
+  }
+  header p{
+    max-width:52ch;
+    font-size:15px;
+    line-height:1.6;
+    color:#c8c4b6;
+    margin:0;
+  }
+
+  /* ---------- layout ---------- */
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:28px;
+  }
+  @media (max-width:860px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  .card{
+    background:var(--paper);
+    color:var(--ink);
+    border-radius:3px;
+    padding:22px 22px 20px;
+    position:relative;
+    box-shadow:0 18px 40px -18px rgba(0,0,0,0.55);
+  }
+  .card::before{
+    content:'';
+    position:absolute;
+    top:0; left:22px; right:22px;
+    height:1px;
+    background:var(--hair);
+  }
+  .card-label{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .card-label .tag{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:600;
+  }
+  .card-label .meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--rust-dim);
+  }
+
+  textarea{
+    width:100%;
+    min-height:230px;
+    resize:vertical;
+    border:none;
+    outline:none;
+    background:transparent;
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:16px;
+    line-height:1.6;
+    color:var(--ink);
+    padding:0;
+  }
+  textarea::placeholder{color:#9b9686;}
+
+  .examples{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:16px;
+    padding-top:14px;
+    border-top:1px solid var(--hair);
+  }
+  .ex-btn{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.02em;
+    background:var(--paper-2);
+    border:1px solid var(--hair);
+    color:var(--ink);
+    padding:6px 10px;
+    border-radius:2px;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .ex-btn:hover{background:#dfd8c3;}
+  .ex-btn:active{transform:translateY(1px);}
+
+  /* ---------- output tiles ---------- */
+  .tile-field{
+    min-height:230px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-start;
+    align-content:flex-start;
+    gap:14px 10px;
+  }
+  .empty-state{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color:#9b9686;
+    padding-top:4px;
+  }
+
+  .compound{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+  }
+  .tiles{
+    display:flex;
+    gap:3px;
+  }
+  .tile{
+    width:38px;
+    height:38px;
+    border-radius:3px;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#f5f2e8;
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:15px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+  }
+  .tile .znum{
+    position:absolute;
+    top:2px; left:3px;
+    font-size:7px;
+    font-weight:500;
+    opacity:0.85;
+  }
+  .tile.approx::after{
+    content:'~';
+    position:absolute;
+    bottom:1px; right:3px;
+    font-size:9px;
+    color:#f5f2e8;
+    opacity:0.9;
+  }
+  .tile.c-ak{background:var(--c-ak);}
+  .tile.c-ae{background:var(--c-ae); color:#2a2416;}
+  .tile.c-tm{background:var(--c-tm);}
+  .tile.c-pt{background:var(--c-pt);}
+  .tile.c-me{background:var(--c-me);}
+  .tile.c-nm{background:var(--c-nm);}
+  .tile.c-ha{background:var(--c-ha);}
+  .tile.c-ng{background:var(--c-ng); color:#2a2a26;}
+  .tile.c-re{background:var(--c-re); color:#2a2416;}
+  .tile.c-un{background:var(--c-un);}
+
+  .compound .label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    border-top:1px solid var(--hair);
+    padding-top:4px;
+    width:100%;
+    text-align:center;
+  }
+
+  .raw-token{
+    align-self:flex-end;
+    font-family:'IBM Plex Sans', sans-serif;
+    color:var(--ink-soft);
+    font-size:18px;
+    padding-bottom:14px;
+  }
+
+  /* ---------- plain-text row ---------- */
+  .plain-row{
+    margin-top:18px;
+    padding-top:14px;
+    border-top:1px solid var(--hair);
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+  }
+  .plain-text{
+    flex:1;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    line-height:1.7;
+    color:var(--ink-soft);
+    word-break:break-word;
+  }
+  .copy-btn{
+    flex-shrink:0;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    padding:8px 12px;
+    border-radius:2px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .copy-btn:hover{background:var(--rust-dim);}
+
+  /* ---------- legend ---------- */
+  .legend{
+    margin-top:36px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px 22px;
+  }
+  .legend-item{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:#a9a597;
+  }
+  .swatch{
+    width:10px;height:10px;border-radius:2px;flex-shrink:0;
+  }
+
+  footer{
+    margin-top:44px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:#6c6a5e;
+    line-height:1.7;
+    max-width:70ch;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Periodic transliteration · a specimen of your sentence</p>
+    <h1>chemtxt<span class="num">v1</span></h1>
+    <p>Write anything in English. It gets respelled as a sequence of periodic-table
+       element symbols — exact where a word can be spelled precisely, approximated
+       (marked with <strong>~</strong>) where it can't.</p>
+  </header>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-label">
+        <span class="tag">Your text</span>
+        <span class="meta" id="wordCount">0 words</span>
+      </div>
+      <textarea id="input" placeholder="Type a sentence, e.g. &quot;science is fun&quot;…" spellcheck="false"></textarea>
+      <div class="examples">
+        <button class="ex-btn" data-ex="neon">neon</button>
+        <button class="ex-btn" data-ex="science is fun">science is fun</button>
+        <button class="ex-btn" data-ex="the quick brown fox jumps over the lazy dog">the quick brown fox</button>
+        <button class="ex-btn" data-ex="I love chemistry">I love chemistry</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">
+        <span class="tag">chemtxt</span>
+        <span class="meta" id="stat">— </span>
+      </div>
+      <div class="tile-field" id="output">
+        <span class="empty-state">Specimens will appear here once you start writing.</span>
+      </div>
+      <div class="plain-row">
+        <div class="plain-text" id="plainText"></div>
+        <button class="copy-btn" id="copyBtn">Copy</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <footer>
+    Each tile is a real element: symbol, atomic number, color-coded by category.
+    A <strong>~</strong> marks a substitution used because no exact spelling existed
+    for that letter (e.g. "d" → Ds, Darmstadtium). Element symbols within a word are
+    always matched case-insensitively and joined without gaps to reconstruct the word.
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================
+   Periodic table data: [atomicNumber, symbol, name, category]
+   categories: ak alkali · ae alkaline-earth · tm transition
+   pt post-transition · me metalloid · nm nonmetal · ha halogen
+   ng noble-gas · re rare-earth (lanth./actin.) · un synthetic
+   ============================================================ */
+const ELEMENTS = [
+[1,"H","Hydrogen","nm"],[2,"He","Helium","ng"],[3,"Li","Lithium","ak"],
+[4,"Be","Beryllium","ae"],[5,"B","Boron","me"],[6,"C","Carbon","nm"],
+[7,"N","Nitrogen","nm"],[8,"O","Oxygen","nm"],[9,"F","Fluorine","ha"],
+[10,"Ne","Neon","ng"],[11,"Na","Sodium","ak"],[12,"Mg","Magnesium","ae"],
+[13,"Al","Aluminium","pt"],[14,"Si","Silicon","me"],[15,"P","Phosphorus","nm"],
+[16,"S","Sulfur","nm"],[17,"Cl","Chlorine","ha"],[18,"Ar","Argon","ng"],
+[19,"K","Potassium","ak"],[20,"Ca","Calcium","ae"],[21,"Sc","Scandium","tm"],
+[22,"Ti","Titanium","tm"],[23,"V","Vanadium","tm"],[24,"Cr","Chromium","tm"],
+[25,"Mn","Manganese","tm"],[26,"Fe","Iron","tm"],[27,"Co","Cobalt","tm"],
+[28,"Ni","Nickel","tm"],[29,"Cu","Copper","tm"],[30,"Zn","Zinc","tm"],
+[31,"Ga","Gallium","pt"],[32,"Ge","Germanium","me"],[33,"As","Arsenic","me"],
+[34,"Se","Selenium","nm"],[35,"Br","Bromine","ha"],[36,"Kr","Krypton","ng"],
+[37,"Rb","Rubidium","ak"],[38,"Sr","Strontium","ae"],[39,"Y","Yttrium","tm"],
+[40,"Zr","Zirconium","tm"],[41,"Nb","Niobium","tm"],[42,"Mo","Molybdenum","tm"],
+[43,"Tc","Technetium","tm"],[44,"Ru","Ruthenium","tm"],[45,"Rh","Rhodium","tm"],
+[46,"Pd","Palladium","tm"],[47,"Ag","Silver","tm"],[48,"Cd","Cadmium","tm"],
+[49,"In","Indium","pt"],[50,"Sn","Tin","pt"],[51,"Sb","Antimony","me"],
+[52,"Te","Tellurium","me"],[53,"I","Iodine","ha"],[54,"Xe","Xenon","ng"],
+[55,"Cs","Caesium","ak"],[56,"Ba","Barium","ae"],[57,"La","Lanthanum","re"],
+[58,"Ce","Cerium","re"],[59,"Pr","Praseodymium","re"],[60,"Nd","Neodymium","re"],
+[61,"Pm","Promethium","re"],[62,"Sm","Samarium","re"],[63,"Eu","Europium","re"],
+[64,"Gd","Gadolinium","re"],[65,"Tb","Terbium","re"],[66,"Dy","Dysprosium","re"],
+[67,"Ho","Holmium","re"],[68,"Er","Erbium","re"],[69,"Tm","Thulium","re"],
+[70,"Yb","Ytterbium","re"],[71,"Lu","Lutetium","re"],[72,"Hf","Hafnium","tm"],
+[73,"Ta","Tantalum","tm"],[74,"W","Tungsten","tm"],[75,"Re","Rhenium","tm"],
+[76,"Os","Osmium","tm"],[77,"Ir","Iridium","tm"],[78,"Pt","Platinum","tm"],
+[79,"Au","Gold","tm"],[80,"Hg","Mercury","tm"],[81,"Tl","Thallium","pt"],
+[82,"Pb","Lead","pt"],[83,"Bi","Bismuth","pt"],[84,"Po","Polonium","pt"],
+[85,"At","Astatine","ha"],[86,"Rn","Radon","ng"],[87,"Fr","Francium","ak"],
+[88,"Ra","Radium","ae"],[89,"Ac","Actinium","re"],[90,"Th","Thorium","re"],
+[91,"Pa","Protactinium","re"],[92,"U","Uranium","re"],[93,"Np","Neptunium","re"],
+[94,"Pu","Plutonium","re"],[95,"Am","Americium","re"],[96,"Cm","Curium","re"],
+[97,"Bk","Berkelium","re"],[98,"Cf","Californium","re"],[99,"Es","Einsteinium","re"],
+[100,"Fm","Fermium","re"],[101,"Md","Mendelevium","re"],[102,"No","Nobelium","re"],
+[103,"Lr","Lawrencium","re"],[104,"Rf","Rutherfordium","un"],[105,"Db","Dubnium","un"],
+[106,"Sg","Seaborgium","un"],[107,"Bh","Bohrium","un"],[108,"Hs","Hassium","un"],
+[109,"Mt","Meitnerium","un"],[110,"Ds","Darmstadtium","un"],[111,"Rg","Roentgenium","un"],
+[112,"Cn","Copernicium","un"],[113,"Nh","Nihonium","un"],[114,"Fl","Flerovium","un"],
+[115,"Mc","Moscovium","un"],[116,"Lv","Livermorium","un"],[117,"Ts","Tennessine","un"],
+[118,"Og","Oganesson","un"]
+];
+
+const BY_UPPER = {};
+ELEMENTS.forEach(e => { BY_UPPER[e[1].toUpperCase()] = e; });
+
+const PHONETIC_SUBS = [
+  ["PH","F"],["SH","S"],["CH","K"],["CK","K"],["QU","KW"],["TH","T"],
+  ["X","KS"],["Z","S"],["J","I"],["Y","I"],["W","V"],["EE","I"],["OO","U"],["OU","U"]
+];
+
+const LETTER_FALLBACK = {
+  A:"AR", D:"DS", E:"ER", G:"GE", L:"LI", M:"MG",
+  Q:"K", R:"RA", T:"TI", X:"XE", Z:"ZN"
+};
+
+function segmentExact(wordUpper){
+  const n = wordUpper.length;
+  const dp = new Array(n+1).fill(null);
+  dp[0] = [];
+  for(let i=1;i<=n;i++){
+    let best = null;
+    for(const len of [2,1]){
+      const j = i-len;
+      if(j<0 || dp[j]===null) continue;
+      const sub = wordUpper.slice(j,i);
+      if(BY_UPPER[sub]){
+        const cand = dp[j].concat([{el:BY_UPPER[sub], approx:false}]);
+        if(best===null || cand.length < best.length) best = cand;
+      }
+    }
+    dp[i] = best;
+  }
+  return dp[n];
+}
+
+function fallbackSpell(wordUpper){
+  const out = [];
+  let i = 0;
+  const n = wordUpper.length;
+  while(i<n){
+    const two = wordUpper.slice(i,i+2);
+    const one = wordUpper.slice(i,i+1);
+    if(BY_UPPER[two]){ out.push({el:BY_UPPER[two], approx:false}); i+=2; }
+    else if(BY_UPPER[one]){ out.push({el:BY_UPPER[one], approx:false}); i+=1; }
+    else {
+      const sub = LETTER_FALLBACK[one];
+      if(sub){ out.push({el:BY_UPPER[sub], approx:true}); }
+      i+=1;
+    }
+  }
+  return out;
+}
+
+function translateWord(word){
+  const upper = word.toUpperCase();
+  let exact = segmentExact(upper);
+  if(exact) return exact;
+
+  for(const [target, repl] of PHONETIC_SUBS){
+    if(upper.includes(target)){
+      const variant = upper.split(target).join(repl);
+      exact = segmentExact(variant);
+      if(exact) return exact.map(x => ({el:x.el, approx:true}));
+    }
+  }
+  return fallbackSpell(upper);
+}
+
+function tokenize(text){
+  return text.match(/[A-Za-z]+|[^A-Za-z]+/g) || [];
+}
+
+/* ---------------- rendering ---------------- */
+const inputEl = document.getElementById('input');
+const outputEl = document.getElementById('output');
+const plainTextEl = document.getElementById('plainText');
+const statEl = document.getElementById('stat');
+const wordCountEl = document.getElementById('wordCount');
+const legendEl = document.getElementById('legend');
+const copyBtn = document.getElementById('copyBtn');
+
+const CATEGORY_NAMES = {
+  ak:"Alkali metal", ae:"Alkaline earth", tm:"Transition metal",
+  pt:"Post-transition", me:"Metalloid", nm:"Nonmetal",
+  ha:"Halogen", ng:"Noble gas", re:"Rare earth", un:"Synthetic"
+};
+
+function buildLegend(){
+  legendEl.innerHTML = Object.keys(CATEGORY_NAMES).map(cat => `
+    <div class="legend-item">
+      <span class="swatch" style="background:var(--c-${cat})"></span>
+      ${CATEGORY_NAMES[cat]}
+    </div>
+  `).join('');
+}
+buildLegend();
+
+function render(){
+  const text = inputEl.value;
+  const tokens = tokenize(text);
+
+  wordCountEl.textContent = (text.trim() ? text.trim().split(/\s+/).length : 0) + " words";
+
+  if(!text.trim()){
+    outputEl.innerHTML = '<span class="empty-state">Specimens will appear here once you start writing.</span>';
+    plainTextEl.textContent = '';
+    statEl.textContent = '— ';
+    return;
+  }
+
+  let html = '';
+  let plain = '';
+  let totalTiles = 0, approxTiles = 0;
+
+  for(const tok of tokens){
+    if(/^[A-Za-z]+$/.test(tok)){
+      const spelled = translateWord(tok);
+      totalTiles += spelled.length;
+      approxTiles += spelled.filter(s=>s.approx).length;
+
+      const tilesHtml = spelled.map(s => {
+        const [num, sym, name, cat] = s.el;
+        return `<div class="tile c-${cat}${s.approx?' approx':''}" title="${name} (${sym}, #${num})${s.approx?' — approximated':''}">
+                  <span class="znum">${num}</span>${sym}
+                </div>`;
+      }).join('');
+
+      html += `<div class="compound">
+                 <div class="tiles">${tilesHtml}</div>
+                 <div class="label">${tok.toLowerCase()}</div>
+               </div>`;
+
+      plain += spelled.map(s=>s.el[1]).join('-');
+    } else {
+      // whitespace / punctuation
+      const safe = tok.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      if(tok.trim()===''){
+        plain += tok;
+        html += `<span style="flex-basis:100%;height:0;" aria-hidden="true"></span>`.repeat(0);
+      } else {
+        html += `<span class="raw-token">${safe}</span>`;
+        plain += tok;
+      }
+    }
+  }
+
+  outputEl.innerHTML = html;
+  plainTextEl.textContent = plain;
+
+  const pct = totalTiles ? Math.round(100*(totalTiles-approxTiles)/totalTiles) : 100;
+  statEl.textContent = `${totalTiles} tiles · ${pct}% exact`;
+}
+
+inputEl.addEventListener('input', render);
+
+document.querySelectorAll('.ex-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    inputEl.value = btn.dataset.ex;
+    render();
+    inputEl.focus();
+  });
+});
+
+copyBtn.addEventListener('click', async ()=>{
+  const text = plainTextEl.textContent;
+  if(!text) return;
+  try{
+    await navigator.clipboard.writeText(text);
+    const orig = copyBtn.textContent;
+    copyBtn.textContent = 'Copied';
+    setTimeout(()=>{ copyBtn.textContent = orig; }, 1200);
+  }catch(e){
+    /* clipboard unavailable — silently ignore */
+  }
+});
+
+// seed with an example on load
+inputEl.value = "science is fun";
+render();
+</script>
+</body>
+</html>
